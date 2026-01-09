@@ -1,98 +1,51 @@
 <?php
-/** @var \Laravel\Lumen\Routing\Router $router */
 
-/*
-|--------------------------------------------------------------------------
-| Application Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register all of the routes for an application.
-| It is a breeze. Simply tell Lumen the URIs it should respond to
-| and give it the Closure to call when that URI is requested.
-|
-*/
+$router->get('/cart', function () use ($router) {
+    return 'Cart Service is running';
+});
 
-// ====================================================================
-// DUMMY CART DATA
-// Data keranjang akan disimpan sementara di memori.
-// ====================================================================
+// Gunakan variabel global atau simpan data dengan struktur yang konsisten
 $carts = [
     'items' => [
-        [
-            'id' => 1,
-            'name' => 'Produk A',
-            'quantity' => 2,
-            'price' => 50.00
-        ],
-        [
-            'id' => 2,
-            'name' => 'Produk B',
-            'quantity' => 1,
-            'price' => 30.00
-        ],
-        [
-            'id' => 3,
-            'name' => 'Produk C',
-            'quantity' => 1,
-            'price' => 50.00
-        ]
+        ['id' => 1, 'name' => 'Product A', 'quantity' => 2, 'price' => 50.00],
+        ['id' => 2, 'name' => 'Product B', 'quantity' => 1, 'price' => 30.00],
+        ['id' => 3, 'name' => 'Product C', 'quantity' => 1, 'price' => 50.00]
     ],
     'total' => 130.00
 ];
 
-// ====================================================================
-// CART SERVICE API ENDPOINTS
-// ====================================================================
-
-// Base Route
-$router->get('/', function () use ($router) {
-    return response()->json(['service' => 'Cart Service is running', 'framework' => 'Lumen']);
-});
-
-// GET all carts
+// 1. Get all items
 $router->get('/carts', function () use ($carts) {
     return response()->json($carts);
 });
 
-// GET cart by id (Detail Cart) - Dibuat lebih aman
+// 2. Get cart by id
 $router->get('/carts/{id}', function ($id) use ($carts) {
-    $itemId = (int) $id;
-
+    // Cari di dalam array 'items'
     foreach ($carts['items'] as $item) {
-        // PERBAIKAN: Tambahkan pengaman isset() untuk mencegah "Undefined array key"
-        if (isset($item['id']) && $item['id'] === $itemId) { 
+        if ($item['id'] == $id) {
             return response()->json($item);
         }
     }
-    // Menggunakan response helper Lumen/Laravel
     return response()->json(['message' => 'Item not found'], 404);
 });
-$router->delete('/carts/{id}', function ($id) {
-    global $carts; // pastikan pakai global
+
+// 3. Delete item from cart (Perbaikan Logika)
+$router->delete('/cart/{id}', function ($id) use ($carts) {
     $cartId = (int) $id;
-    $itemFound = false;
 
-    if (!isset($carts['items']) || !is_array($carts['items'])) {
-        return response()->json(['message' => 'Cart kosong'], 400);
+    // Cari apakah ID ada di dalam $carts['items']
+    $foundKey = array_search($cartId, array_column($carts['items'], 'id'));
+
+    if ($foundKey === false) { 
+        return response()->json(['message' => 'Item not found'], 404);
     }
 
-    foreach ($carts['items'] as $key => $item) {
-        if (is_array($item) && isset($item['id']) && $item['id'] === $cartId) {
-            unset($carts['items'][$key]);
-            $itemFound = true;
-            break;
-        }
-    }
-
-    if (!$itemFound) return response()->json(['message' => 'Item not found'], 404);
-
-    $carts['items'] = array_values($carts['items']);
-    $carts['total'] = array_reduce($carts['items'], function($sum, $item){
-        return $sum + ($item['quantity'] ?? 0) * ($item['price'] ?? 0);
-    }, 0);
+    // Jika ini aplikasi asli, di sini Anda akan menghapus data dari DB/Redis
+    // unset($carts['items'][$foundKey]); 
 
     return response()->json([
         'message' => 'Item deleted successfully',
-        'new_cart_data' => $carts
+        'deleted_id' => $cartId
     ]);
 });

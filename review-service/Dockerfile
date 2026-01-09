@@ -1,18 +1,23 @@
-FROM python:3.11-slim
+# Gunakan image python versi alpine
+FROM python:3.11-alpine
 
+# Set folder kerja
 WORKDIR /app
 
-# Copy requirements terlebih dahulu
+# Install build dependencies (diperlukan untuk beberapa library python)
+RUN apk add --no-cache gcc musl-dev linux-headers
+
+# Copy requirements.txt (pastikan file ini ada)
 COPY requirements.txt .
 
-# Install dependency
+# Install library python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy semua file aplikasi
+# Copy semua kode sumber
 COPY . .
 
-# expose port di container
-EXPOSE 5002
+# Expose port (akan disesuaikan via docker-compose)
+EXPOSE 5004
 
-# jalankan aplikasi
+# Jalankan aplikasi (asumsi menggunakan flask atau fastapi)
 CMD ["python", "app.py"]

@@ -17,7 +17,7 @@ RUN npm install
 COPY . .
 
 #expose port 3000 (agar bisa diakses dari luar container)
-EXPOSE 4000
+EXPOSE 7000
 
 #jalankan aplikasi
 CMD ["npm", "start"]

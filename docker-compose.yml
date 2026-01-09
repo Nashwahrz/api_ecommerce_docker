@@ -1,43 +1,177 @@
+version: '3.8'
+
 services:
-  product-service:
-    build: ./product-services
-    ports: 
-      - "${PRODUCT_SERVICE_PORT}:3000"
-    env_file:
-      - .env
-    environment:
-      DB_HOST: ${PRODUCT_DB_HOST}
-      DB_NAME: ${PRODUCT_DB_NAME}
-      DB_USER: ${PRODUCT_DB_USER}
-      DB_PASSWORD: ${PRODUCT_DB_PASSWORD}
-    container_name: product-services
+  # --- USER SERVICE (NODE.JS + POSTGRES) ---
+  user-db:
+    image: postgres:15-alpine
+    container_name: user-db
     restart: always
-    depends_on:
-      - product-db
-  
-  product-db:
-    image: mysql:latest
-    env_file:
-      - .env
     environment:
-      MYSQL_ROOT_PASSWORD : ${PRODUCT_DB_PASSWORD}
-      MYSQL_DATABASE : ${PRODUCT_DB_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    ports:
+      - "${USER_SERVICE_PORT}:7000"
+    environment:
+      DB_HOST: user-db
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      PORT: 7000
+    networks:
+      - ecommerce-network
+    depends_on:
+      user-db:
+        condition: service_healthy
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin-service
+    ports:
+      - "${PGADMIN_PORT}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@email.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    networks:
+      - ecommerce-network
+    depends_on:
+      - user-db
+
+  # --- PRODUCT SERVICE (NODE.JS + MYSQL) ---
+  product-db:
+    image: mysql:8.0
+    container_name: product-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
     volumes:
       - product-db-data:/var/lib/mysql
-  
-  # cart-service:
-  #   build: ./cart-services
-  #   ports:
-  #     - "8000:8000"
-  #   container_name: cart-services
-  #   restart: always
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # review-service:
-  #   build: ./review-services
-  #   ports:
-  #     - "5002:5002"
-  #   container_name: review-services
-  #   restart: always
+  product-service:
+    build: ./product-services
+    container_name: product-service
+    ports:
+      - "${PRODUCT_SERVICE_PORT}:3000"
+    environment:
+      DB_HOST: product-db
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      DB_NAME: ${MYSQL_DATABASE}
+    networks:
+      - ecommerce-network
+    depends_on:
+      product-db:
+        condition: service_healthy
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin-service
+    ports:
+      - "${PHPMYADMIN_PORT}:80"
+    environment:
+      PMA_HOST: product-db
+      PMA_USER: root
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      PMA_ARBITRARY: 1
+    networks:
+      - ecommerce-network
+    depends_on:
+      - product-db
+
+  # --- REVIEW SERVICE (PYTHON + MONGO) ---
+  mongo-db:
+    image: mongo:latest
+    container_name: mongo-db
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASS}
+    ports:
+      - "${MONGO_PORT}:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - ecommerce-network
+
+  review-service:
+    build: ./review-service
+    container_name: review-service
+    ports:
+      - "5004:5004"
+    environment:
+      # Ditambahkan ?authSource=admin agar login root diakui
+      MONGO_URL: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASS}@mongo-db:27017/review_db?authSource=admin
+    networks:
+      - ecommerce-network
+    depends_on:
+      - mongo-db
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: mongo-express-ui
+    restart: on-failure
+    ports:
+      - "${MONGO_EXPRESS_PORT}:8081"
+    environment:
+      # Gunakan URL lengkap untuk menghindari konflik konfigurasi default
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASS}@mongo-db:27017/?authSource=admin
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_ROOT_USER}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_ROOT_PASS} 
+    networks:
+      - ecommerce-network
+    depends_on:
+      - mongo-db
+
+  # --- CART SERVICE (PHP) ---
+  redis-db:
+    image: redis:alpine
+    container_name: redis-db
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+  cart-service:
+    build: ./cart-service
+    container_name: cart-service
+    restart: always
+    ports:
+      - "6001:6001" # Kita pakai port 6000
+    env_file:
+      - .env
+    depends_on:
+      - redis-db
+    environment:
+      REDIS_HOST: redis-db
+      REDIS_PORT: 6379
+
+networks:
+  ecommerce-network:
+    driver: bridge
 
 volumes:
+  user-db-data:
   product-db-data:
+  mongo-data:
+  redis-data:

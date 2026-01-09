@@ -1,23 +1,20 @@
-#gunakan image node js versi 18
+# Gunakan image node versi alpine agar ringan
 FROM node:18-alpine
-# COPY src/ /var/www/html/
-# Enable useful Apache modules
-# RUN a2enmod rewrite
-# RUN docker-php-ext-install pdo_mysql mysqli && docker-php-ext-enable pdo_mysql mysqli
 
+# Set folder kerja
 WORKDIR /app
 
-#copy file package.json ke dalam container
-COPY package.json . /app/
+# Copy package.json terlebih dahulu untuk optimasi cache
+COPY package*.json ./
 
-#install dependencies
+# Install dependensi
 RUN npm install
 
-#copy semua file ke dalam container
+# Copy semua kode sumber
 COPY . .
 
-#expose port 3000 (agar bisa diakses dari luar container)
+# Expose port (akan disesuaikan via docker-compose)
 EXPOSE 3000
 
-#jalankan aplikasi
+# Jalankan aplikasi
 CMD ["npm", "start"]
